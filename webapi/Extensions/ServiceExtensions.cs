@@ -3,6 +3,7 @@
 using System.Reflection;
 using CopilotChat.Shared;
 using CopilotChat.WebApi.Auth;
+using CopilotChat.WebApi.Models.Kernel;
 using CopilotChat.WebApi.Models.Storage;
 using CopilotChat.WebApi.Options;
 using CopilotChat.WebApi.Services;
@@ -223,10 +224,13 @@ public static class CopilotChatServiceExtensions
             }
         }
 
-        services.AddSingleton<ChatSessionRepository>(new ChatSessionRepository(chatSessionStorageContext));
+        // Register repositories
+        var chatParticipantRepository = new ChatParticipantRepository(chatParticipantStorageContext);
+        services.AddSingleton<ChatParticipantRepository>(chatParticipantRepository);
+        
+        services.AddSingleton<ChatSessionRepository>(new ChatSessionRepository(chatSessionStorageContext, chatParticipantRepository));
         services.AddSingleton<ChatMessageRepository>(new ChatMessageRepository(chatMessageStorageContext));
         services.AddSingleton<ChatMemorySourceRepository>(new ChatMemorySourceRepository(chatMemorySourceStorageContext));
-        services.AddSingleton<ChatParticipantRepository>(new ChatParticipantRepository(chatParticipantStorageContext));
 
         return services;
     }
@@ -248,6 +252,63 @@ public static class CopilotChatServiceExtensions
                         .AddRequirements(new ChatParticipantRequirement());
                 });
             });
+    }
+
+    /// <summary>
+    /// Add services for user-specific kernel management.
+    /// </summary>
+    public static IServiceCollection AddUserKernelServices(this IServiceCollection services)
+    {
+        // Get storage options
+        ChatStoreOptions chatStoreConfig = services.BuildServiceProvider().GetRequiredService<IOptions<ChatStoreOptions>>().Value;
+
+        // Create storage context based on configuration
+        IStorageContext<UserKernelConfig> userKernelConfigStorageContext;
+
+        switch (chatStoreConfig.Type)
+        {
+            case ChatStoreOptions.ChatStoreType.Volatile:
+                userKernelConfigStorageContext = new VolatileContext<UserKernelConfig>();
+                break;
+
+            case ChatStoreOptions.ChatStoreType.Filesystem:
+                if (chatStoreConfig.Filesystem == null)
+                {
+                    throw new InvalidOperationException("ChatStore:Filesystem is required when ChatStore:Type is 'Filesystem'");
+                }
+
+                string fullPath = Path.GetFullPath(chatStoreConfig.Filesystem.FilePath);
+                string directory = Path.GetDirectoryName(fullPath) ?? string.Empty;
+                userKernelConfigStorageContext = new FileSystemContext<UserKernelConfig>(
+                    new FileInfo(Path.Combine(directory, $"{Path.GetFileNameWithoutExtension(fullPath)}_userconfigs{Path.GetExtension(fullPath)}")));
+                break;
+
+            case ChatStoreOptions.ChatStoreType.Cosmos:
+                if (chatStoreConfig.Cosmos == null)
+                {
+                    throw new InvalidOperationException("ChatStore:Cosmos is required when ChatStore:Type is 'Cosmos'");
+                }
+
+                userKernelConfigStorageContext = new CosmosDbContext<UserKernelConfig>(
+                    chatStoreConfig.Cosmos.ConnectionString,
+                    chatStoreConfig.Cosmos.Database,
+                    "userconfigs"); // Using a fixed container name
+                break;
+
+            default:
+                throw new InvalidOperationException("Invalid 'ChatStore' setting 'chatStoreConfig.Type'.");
+        }
+
+        // Register the user kernel config repository with explicit instance
+        services.AddSingleton<IUserKernelConfigRepository>(new UserKernelConfigRepository(userKernelConfigStorageContext));
+
+        // Register the kernel manager as a singleton
+        services.AddSingleton<IKernelManager, KernelManager>();
+
+        // Register the kernel cleanup service
+        services.AddHostedService<KernelCleanupService>();
+
+        return services;
     }
 
     /// <summary>

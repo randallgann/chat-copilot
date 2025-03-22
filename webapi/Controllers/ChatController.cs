@@ -67,7 +67,7 @@ public class ChatController : ControllerBase, IDisposable
     /// <summary>
     /// Invokes the chat function to get a response from the bot.
     /// </summary>
-    /// <param name="kernel">Semantic kernel obtained through dependency injection.</param>
+    /// <param name="kernelManager">The kernel manager for retrieving context-specific kernels.</param>
     /// <param name="messageRelayHubContext">Message Hub that performs the real time relay service.</param>
     /// <param name="chatSessionRepository">Repository of chat sessions.</param>
     /// <param name="chatParticipantRepository">Repository of chat participants.</param>
@@ -83,7 +83,7 @@ public class ChatController : ControllerBase, IDisposable
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status504GatewayTimeout)]
     public async Task<IActionResult> ChatAsync(
-        [FromServices] Kernel kernel,
+        [FromServices] IKernelManager kernelManager,
         [FromServices] IHubContext<MessageRelayHub> messageRelayHubContext,
         [FromServices] ChatSessionRepository chatSessionRepository,
         [FromServices] ChatParticipantRepository chatParticipantRepository,
@@ -109,6 +109,14 @@ public class ChatController : ControllerBase, IDisposable
         {
             return this.Forbid("User does not have access to the chatId specified in variables.");
         }
+
+        // Get the context ID from the Ask model, falling back to chat's contextId
+        // If neither is available, use "default"
+        string contextId = ask.ContextId ?? chat!.ContextId ?? "default";
+        
+        // Get the kernel for this user and context
+        Kernel kernel = await kernelManager.GetUserKernelAsync(authInfo.UserId, contextId);
+        this._logger.LogInformation("Using kernel for user {UserId} with context {ContextId}", authInfo.UserId, contextId);
 
         // Register plugins that have been enabled
         var openApiPluginAuthHeaders = this.GetPluginAuthHeaders(this.HttpContext.Request.Headers);

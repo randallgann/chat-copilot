@@ -73,7 +73,7 @@ public abstract class ChatCopilotIntegrationTest : IDisposable
         string? scopeString = this.Configuration[ScopesSettingName];
         Assert.NotNull(scopeString);
 
-        string[] scopes = scopeString.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
+        string[] scopes = scopeString.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
         var accounts = await app.GetAccountsAsync();
 

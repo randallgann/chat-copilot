@@ -72,7 +72,7 @@ public class ChatHistoryController : ControllerBase
     /// <summary>
     /// Create a new chat session and populate the session with the initial bot message.
     /// </summary>
-    /// <param name="chatParameter">Contains the title of the chat.</param>
+    /// <param name="chatParameters">Contains the parameters for creating a chat.</param>
     /// <returns>The HTTP action result.</returns>
     [HttpPost]
     [Route("chats")]
@@ -87,7 +87,10 @@ public class ChatHistoryController : ControllerBase
         }
 
         // Create a new chat session
-        var newChat = new ChatSession(chatParameters.Title, this._promptOptions.SystemDescription);
+        var newChat = new ChatSession(
+            chatParameters.Title, 
+            this._promptOptions.SystemDescription, 
+            chatParameters.ContextId); // Pass the contextId if provided
         await this._sessionRepository.CreateAsync(newChat);
 
         // Create initial bot message
@@ -131,16 +134,23 @@ public class ChatHistoryController : ControllerBase
     /// <summary>
     /// Get all chat sessions associated with the logged in user. Return an empty list if no chats are found.
     /// </summary>
-    /// <param name="userId">The user id.</param>
+    /// <param name="contextId">Optional context ID to filter chats by.</param>
     /// <returns>A list of chat sessions. An empty list if the user is not in any chat session.</returns>
     [HttpGet]
     [Route("chats")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetAllChatSessionsAsync()
+    public async Task<IActionResult> GetAllChatSessionsAsync([FromQuery] string? contextId = null)
     {
-        // Get all participants that belong to the user.
+        // If contextId is provided, use the filtered method
+        if (!string.IsNullOrEmpty(contextId))
+        {
+            var contextChats = await this._sessionRepository.FindByUserIdAndContextIdAsync(this._authInfo.UserId, contextId);
+            return this.Ok(contextChats);
+        }
+
+        // Otherwise get all participants that belong to the user.
         // Then get all the chats from the list of participants.
         var chatParticipants = await this._participantRepository.FindByUserIdAsync(this._authInfo.UserId);
 
@@ -158,6 +168,21 @@ public class ChatHistoryController : ControllerBase
             }
         }
 
+        return this.Ok(chats);
+    }
+    
+    /// <summary>
+    /// Get chat sessions associated with the logged in user filtered by context ID.
+    /// </summary>
+    /// <param name="contextId">The context ID to filter by (e.g., channelId).</param>
+    /// <returns>A list of chat sessions matching the contextId.</returns>
+    [HttpGet]
+    [Route("chats/context/{contextId}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetChatSessionsByContextIdAsync(string contextId)
+    {
+        var chats = await this._sessionRepository.FindByUserIdAndContextIdAsync(this._authInfo.UserId, contextId);
         return this.Ok(chats);
     }
 

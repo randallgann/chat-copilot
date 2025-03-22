@@ -14,4 +14,10 @@ public class CreateChatParameters
     /// </summary>
     [JsonPropertyName("title")]
     public string? Title { get; set; }
+
+    /// <summary>
+    /// The context ID associated with this chat (e.g., channelId for YouTube channels).
+    /// </summary>
+    [JsonPropertyName("contextId")]
+    public string? ContextId { get; set; }
 }

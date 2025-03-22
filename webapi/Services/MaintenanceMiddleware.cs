@@ -22,22 +22,25 @@ public class MaintenanceMiddleware
 
     private bool? _isInMaintenance;
 
+    private readonly IKernelManager _kernelManager;
+
     public MaintenanceMiddleware(
         RequestDelegate next,
         IReadOnlyList<IMaintenanceAction> actions,
         IOptions<ServiceOptions> serviceOptions,
         IHubContext<MessageRelayHub> messageRelayHubContext,
-        ILogger<MaintenanceMiddleware> logger)
-
+        ILogger<MaintenanceMiddleware> logger,
+        IKernelManager kernelManager)
     {
         this._next = next;
         this._actions = actions;
         this._serviceOptions = serviceOptions;
         this._messageRelayHubContext = messageRelayHubContext;
         this._logger = logger;
+        this._kernelManager = kernelManager;
     }
 
-    public async Task InvokeAsync(HttpContext ctx, Kernel kernel)
+    public async Task InvokeAsync(HttpContext ctx)
     {
         // Skip inspection if _isInMaintenance explicitly false.
         if (this._isInMaintenance == null || this._isInMaintenance.Value)
@@ -49,6 +52,8 @@ public class MaintenanceMiddleware
         // In maintenance if actions say so or explicitly configured.
         if (this._serviceOptions.Value.InMaintenance)
         {
+            // Clear all kernel instances when in maintenance mode
+            await this._kernelManager.ClearAllKernelsAsync();
             await this._messageRelayHubContext.Clients.All.SendAsync(MaintenanceController.GlobalSiteMaintenance, "Site undergoing maintenance...");
         }
 

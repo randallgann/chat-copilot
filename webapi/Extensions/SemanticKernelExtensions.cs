@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft. All rights reserved.
 
 using System.Reflection;
+using CopilotChat.WebApi.Auth;
 using CopilotChat.WebApi.Hubs;
 using CopilotChat.WebApi.Models.Response;
 using CopilotChat.WebApi.Options;
@@ -38,7 +39,9 @@ internal static class SemanticKernelExtensions
     {
         builder.InitializeKernelProvider();
 
-        // Semantic Kernel
+        // Previous singleton kernel implementation
+        // Commented out for per-user kernel implementation
+        /*
         builder.Services.AddScoped<Kernel>(
             sp =>
             {
@@ -51,12 +54,16 @@ internal static class SemanticKernelExtensions
                 sp.GetService<KernelSetupHook>()?.Invoke(sp, kernel);
                 return kernel;
             });
+        */
+        
+        // We no longer register Kernel directly
+        // Controllers now get a Kernel from IKernelManager based on user and context
 
         // Azure Content Safety
         builder.Services.AddContentSafety();
 
-        // Register plugins
-        builder.Services.AddScoped<RegisterFunctionsWithKernel>(sp => RegisterChatCopilotFunctionsAsync);
+        // Register plugins - We now handle this directly in the KernelManager
+        // builder.Services.AddScoped<RegisterFunctionsWithKernel>(sp => RegisterChatCopilotFunctionsAsync);
 
         // Add any additional setup needed for the kernel.
         // Uncomment the following line and pass in a custom hook for any complimentary setup of the kernel.

@@ -22,14 +22,14 @@
 - **Documentation**: Add XML comments to C# public APIs, JSDoc to complex TypeScript functions
 - **Authentication**: Follow MS Identity patterns for auth features
 
-## Per-User Kernel Implementation Class Diagram
+## Multi-Kernel Implementation Class Diagram
 
 ```mermaid
 classDiagram
     class IKernelManager {
         <<interface>>
-        +GetUserKernelAsync(string userId) Task~Kernel~
-        +ReleaseUserKernelAsync(string userId) Task
+        +GetUserKernelAsync(string userId, string? contextId) Task~Kernel~
+        +ReleaseUserKernelAsync(string userId, string? contextId, bool releaseAllUserContexts) Task
         +ClearAllKernelsAsync() Task
     }
 
@@ -39,48 +39,57 @@ classDiagram
         -ILogger _logger
         -IServiceProvider _serviceProvider
         -IUserKernelConfigRepository _configRepository
-        +GetUserKernelAsync(string userId) Task~Kernel~
-        +ReleaseUserKernelAsync(string userId) Task
+        +GetUserKernelAsync(string userId, string? contextId) Task~Kernel~
+        +ReleaseUserKernelAsync(string userId, string? contextId, bool releaseAllUserContexts) Task
         +ClearAllKernelsAsync() Task
-        -CreateUserKernelInfoAsync(string userId) Task~UserKernelInfo~
+        -CreateUserKernelInfoAsync(string userId, string contextId) Task~UserKernelInfo~
         -ApplyUserConfigToKernel(Kernel kernel, UserKernelConfig config) void
     }
     
-    note for KernelManager "Registered as a singleton in DI\nManages UserKernelInfo objects, not Kernels directly\nDictionary key is UUID (e.g., '79c1a50b-ed7a-426c-a510-f995a87a3350')"
+    note for KernelManager "Registered as a singleton in DI\nManages UserKernelInfo objects, not Kernels directly\nDictionary key is composite 'userId:contextId'"
 
     class UserKernelInfo {
         +Kernel Kernel
         +DateTime LastAccessTime
         +string UserId
+        +string ContextId
         +UpdateLastAccessTime() void
         +GetKernel() Kernel
     }
     
-    note for UserKernelInfo "Container for user-specific Kernel\nUserId is PostgreSQL UUID primary key"
+    note for UserKernelInfo "Container for context-specific Kernel\nContextId identifies specific context (e.g., YouTube channel)"
 
     class UserKernelConfig {
         +string UserId
+        +string ContextId
         +Dictionary~string, object~ Settings
         +LLMOptions CompletionOptions
         +LLMOptions EmbeddingOptions
         +List~string~ EnabledPlugins
         +Dictionary~string, string~ ApiKeys
+        +Dictionary~string, object~ ContextSettings
     }
     
-    note for UserKernelConfig "User-specific overrides\nfor kernel configuration"
+    note for UserKernelConfig "User and context-specific overrides\nContextSettings for context-specific data"
 
     class IUserKernelConfigRepository {
         <<interface>>
-        +GetConfigAsync(string userId) Task~UserKernelConfig~
+        +GetConfigAsync(string userId, string? contextId) Task~UserKernelConfig~
+        +GetUserConfigsAsync(string userId) Task~IEnumerable~UserKernelConfig~~
         +SaveConfigAsync(UserKernelConfig config) Task
-        +DeleteConfigAsync(string userId) Task
+        +DeleteConfigAsync(string userId, string? contextId) Task
+        +DeleteAllUserConfigsAsync(string userId) Task
     }
 
     class UserKernelConfigRepository {
         -IStorageContext _storageContext
-        +GetConfigAsync(string userId) Task~UserKernelConfig~
+        +GetConfigAsync(string userId, string? contextId) Task~UserKernelConfig~
+        +GetUserConfigsAsync(string userId) Task~IEnumerable~UserKernelConfig~~
         +SaveConfigAsync(UserKernelConfig config) Task
-        +DeleteConfigAsync(string userId) Task
+        +DeleteConfigAsync(string userId, string? contextId) Task
+        +DeleteAllUserConfigsAsync(string userId) Task
+        -FindByUserIdAsync(string userId) Task~IEnumerable~UserKernelConfig~~
+        -FindByUserIdAndContextIdAsync(string userId, string contextId) Task~IEnumerable~UserKernelConfig~~
     }
 
     class LLMOptions {
@@ -112,9 +121,12 @@ classDiagram
     class UserConfigController {
         -IUserKernelConfigRepository _configRepository
         -IAuthInfo _authInfo
-        +GetUserConfigAsync() Task~IActionResult~
+        -IKernelManager _kernelManager
+        +GetUserConfigAsync(string? contextId) Task~IActionResult~
+        +GetAllUserConfigsAsync() Task~IActionResult~
         +UpdateUserConfigAsync(UserKernelConfig config) Task~IActionResult~
-        +ResetUserConfigAsync() Task~IActionResult~
+        +ResetUserConfigAsync(string? contextId) Task~IActionResult~
+        +ResetAllUserConfigsAsync() Task~IActionResult~
     }
 
     class ChatController {
@@ -148,8 +160,94 @@ classDiagram
     UserKernelConfig o-- LLMOptions : contains
     KernelCleanupService --> IKernelManager : uses
     UserConfigController --> IUserKernelConfigRepository : uses
+    UserConfigController --> IKernelManager : uses
     ChatController --> IKernelManager : uses
     ChatMemoryController --> IKernelManager : uses
     PluginController --> IKernelManager : uses
     MaintenanceMiddleware --> IKernelManager : uses
+```
+
+## Channel-Specific Chat Implementation Class Diagram
+
+```mermaid
+classDiagram
+    class ChatSession {
+        +string Id
+        +string Title
+        +DateTimeOffset CreatedOn
+        +string SystemDescription
+        +float MemoryBalance
+        +HashSet~string~ EnabledPlugins
+        +string ContextId [NEW]
+        +string Version
+        +string Partition
+    }
+    
+    class ChatSessionRepository {
+        -IStorageContext<ChatSession> _storageContext
+        +GetAllChatsAsync() Task~IEnumerable~ChatSession~~
+        +FindByChatIdAsync(string chatId) Task~ChatSession~
+        +FindByUserIdAndContextIdAsync(string userId, string contextId) Task~IEnumerable~ChatSession~~ [NEW]
+    }
+    
+    class ChatParticipant {
+        +string Id
+        +string UserId
+        +string ChatId
+        +string Partition
+    }
+    
+    class ChatParticipantRepository {
+        -IStorageContext<ChatParticipant> _storageContext
+        +FindByUserIdAsync(string userId) Task~IEnumerable~ChatParticipant~~
+        +IsUserInChatAsync(string userId, string chatId) Task~bool~
+    }
+    
+    class ChatHistoryController {
+        -ChatSessionRepository _sessionRepository
+        -ChatParticipantRepository _participantRepository
+        -IAuthInfo _authInfo
+        +CreateChatAsync(CreateChatParameters parameters) Task~IActionResult~
+        +GetAllChatSessionsAsync() Task~IActionResult~
+        +GetChatSessionsByContextIdAsync(string contextId) Task~IActionResult~ [NEW]
+    }
+    
+    class CreateChatParameters {
+        +string Title
+        +string SystemDescription
+        +float MemoryBalance
+        +string? ContextId [NEW]
+    }
+    
+    class UserKernelInfo {
+        +string UserId
+        +string ContextId
+        +Kernel Kernel
+        +DateTime LastAccessTime
+    }
+    
+    class KernelManager {
+        -ConcurrentDictionary~string, UserKernelInfo~ _userKernels
+        +GetUserKernelAsync(string userId, string? contextId) Task~Kernel~
+    }
+    
+    class ChatController {
+        -IKernelManager _kernelManager
+        +ChatAsync(Kernel kernel, Ask ask, Guid chatId, string? contextId) Task~IActionResult~
+    }
+    
+    class IKernelManager {
+        <<interface>>
+        +GetUserKernelAsync(string userId, string? contextId) Task~Kernel~
+    }
+    
+    ChatSession -- ChatSessionRepository: managed by
+    ChatParticipant -- ChatParticipantRepository: managed by
+    ChatHistoryController --> ChatSessionRepository: uses
+    ChatHistoryController --> ChatParticipantRepository: uses
+    ChatHistoryController ..> CreateChatParameters: creates from
+    ChatController --> IKernelManager: uses
+    KernelManager ..|> IKernelManager: implements
+    KernelManager o-- UserKernelInfo: contains
+    ChatController ..> ChatSession: retrieves
 ```

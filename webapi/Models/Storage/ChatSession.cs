@@ -10,7 +10,7 @@ namespace CopilotChat.WebApi.Models.Storage;
 /// </summary>
 public class ChatSession : IStorageEntity
 {
-    private const string CurrentVersion = "2.0";
+    private const string CurrentVersion = "2.1";
 
     /// <summary>
     /// Chat ID that is persistent and unique.
@@ -48,6 +48,11 @@ public class ChatSession : IStorageEntity
     /// A list of enabled plugins.
     /// </summary>
     public HashSet<string> EnabledPlugins { get; set; } = new();
+    
+    /// <summary>
+    /// The context ID associated with this chat (e.g., channelId for YouTube channels).
+    /// </summary>
+    public string ContextId { get; set; } = "default";
 
     /// <summary>
     /// Used to determine if the current chat requires upgrade.
@@ -65,12 +70,14 @@ public class ChatSession : IStorageEntity
     /// </summary>
     /// <param name="title">The title of the chat.</param>
     /// <param name="systemDescription">The system description of the chat.</param>
-    public ChatSession(string title, string systemDescription)
+    /// <param name="contextId">The context ID associated with this chat (e.g., channelId for YouTube channels).</param>
+    public ChatSession(string title, string systemDescription, string? contextId = null)
     {
         this.Id = Guid.NewGuid().ToString();
         this.Title = title;
         this.CreatedOn = DateTimeOffset.Now;
         this.SystemDescription = systemDescription;
+        this.ContextId = contextId ?? "default";
         this.Version = CurrentVersion;
     }
 }
