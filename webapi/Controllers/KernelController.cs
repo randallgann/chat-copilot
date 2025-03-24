@@ -5,8 +5,10 @@ using System.Globalization;
 using System.Reflection;
 using CopilotChat.WebApi.Auth;
 using CopilotChat.WebApi.Models.Kernel;
+using CopilotChat.WebApi.Models.Request;
 using CopilotChat.WebApi.Models.Response;
 using CopilotChat.WebApi.Services;
+using CopilotChat.WebApi.Storage;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.SemanticKernel;
 
@@ -195,6 +197,146 @@ public class KernelController : ControllerBase
                 this._authInfo.UserId, contextId ?? "default");
             return this.StatusCode(StatusCodes.Status500InternalServerError, 
                 new { error = $"Failed to release kernel for context {contextId ?? "default"}" });
+        }
+    }
+
+    /// <summary>
+    /// Create or refresh a kernel for the current user.
+    /// </summary>
+    /// <param name="request">The create kernel request with optional settings.</param>
+    /// <returns>Information about the created kernel.</returns>
+    [Route("api/kernel/create")]
+    [HttpPost]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> CreateKernel([FromBody] CreateKernelRequest? request = null)
+    {
+        try
+        {
+            var userId = this._authInfo.UserId;
+            string contextId = request?.ContextId ?? "default";
+            
+            var configRepository = this.HttpContext.RequestServices.GetRequiredService<IUserKernelConfigRepository>();
+            
+            // Create and save a UserKernelConfig if request was provided
+            if (request != null)
+            {
+                var config = request.ToUserKernelConfig(userId);
+                await configRepository.SaveConfigAsync(config);
+            }
+            
+            // Release any existing kernel for this user/context
+            await this._kernelManager.ReleaseUserKernelAsync(userId, contextId);
+            
+            // Get a fresh kernel - this will create a new one based on the config we just saved
+            var kernel = await this._kernelManager.GetUserKernelAsync(userId, contextId);
+            
+            if (kernel == null)
+            {
+                return this.StatusCode(StatusCodes.Status500InternalServerError, 
+                    new { error = "Failed to create kernel" });
+            }
+            
+            // Get kernel info for response
+            var userKernelInfo = GetUserKernelInfoFromManager(userId, contextId);
+            if (userKernelInfo == null)
+            {
+                return this.StatusCode(StatusCodes.Status500InternalServerError, 
+                    new { error = "Kernel was created but info could not be retrieved" });
+            }
+            
+            var response = CreateKernelInfoResponse(kernel, userKernelInfo);
+            
+            this._logger.LogInformation("Created kernel for user {UserId} with context {ContextId}", 
+                userId, contextId);
+            
+            return this.Ok(response);
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error creating kernel for user {UserId}", this._authInfo.UserId);
+            return this.StatusCode(StatusCodes.Status500InternalServerError, 
+                new { error = "Failed to create kernel" });
+        }
+    }
+    
+    /// <summary>
+    /// Create or refresh a kernel for the current user with a full configuration.
+    /// </summary>
+    /// <param name="config">The full user kernel configuration.</param>
+    /// <returns>Information about the created kernel.</returns>
+    [Route("api/kernel/create/full")]
+    [HttpPost]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> CreateKernelFull([FromBody] UserKernelConfig config)
+    {
+        try
+        {
+            var userId = this._authInfo.UserId;
+            
+            // Ensure the config is for the current user
+            if (config.UserId != userId)
+            {
+                return this.BadRequest(new { error = "User ID in configuration does not match authenticated user." });
+            }
+            
+            // Validate the configuration
+            if (string.IsNullOrEmpty(config.ContextId))
+            {
+                config.ContextId = "default";
+            }
+            
+            // Set created/updated timestamps
+            config.CreatedOn = DateTimeOffset.UtcNow;
+            config.UpdatedOn = DateTimeOffset.UtcNow;
+            
+            // Ensure required properties are initialized
+            config.Settings ??= new Dictionary<string, object>();
+            config.CompletionOptions ??= new LLMOptions();
+            config.EmbeddingOptions ??= new LLMOptions();
+            config.EnabledPlugins ??= new List<string>();
+            config.ApiKeys ??= new Dictionary<string, string>();
+            config.ContextSettings ??= new Dictionary<string, object>();
+            
+            // Save to repository
+            var configRepository = this.HttpContext.RequestServices.GetRequiredService<IUserKernelConfigRepository>();
+            await configRepository.SaveConfigAsync(config);
+            
+            // Release any existing kernel for this user/context
+            await this._kernelManager.ReleaseUserKernelAsync(userId, config.ContextId);
+            
+            // Get a fresh kernel - this will create a new one based on the config we just saved
+            var kernel = await this._kernelManager.GetUserKernelAsync(userId, config.ContextId);
+            
+            if (kernel == null)
+            {
+                return this.StatusCode(StatusCodes.Status500InternalServerError, 
+                    new { error = "Failed to create kernel" });
+            }
+            
+            // Get kernel info for response
+            var userKernelInfo = GetUserKernelInfoFromManager(userId, config.ContextId);
+            if (userKernelInfo == null)
+            {
+                return this.StatusCode(StatusCodes.Status500InternalServerError, 
+                    new { error = "Kernel was created but info could not be retrieved" });
+            }
+            
+            var response = CreateKernelInfoResponse(kernel, userKernelInfo);
+            
+            this._logger.LogInformation("Created kernel for user {UserId} with context {ContextId}", 
+                userId, config.ContextId);
+            
+            return this.Ok(response);
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error creating kernel for user {UserId}", this._authInfo.UserId);
+            return this.StatusCode(StatusCodes.Status500InternalServerError, 
+                new { error = "Failed to create kernel" });
         }
     }
 
