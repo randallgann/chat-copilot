@@ -55,7 +55,7 @@ internal static class SemanticKernelExtensions
                 return kernel;
             });
         */
-        
+
         // We no longer register Kernel directly
         // Controllers now get a Kernel from IKernelManager based on user and context
 

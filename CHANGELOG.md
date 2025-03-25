@@ -65,6 +65,26 @@ Enhanced the application architecture to support context-specific chat sessions 
 - Enhanced user customization capabilities
 - Better organization of related conversations
 
+### 2025-03-22: Kernel Management API Enhancements
+
+Enhanced the kernel management API with new endpoints to create and manage kernels directly through Swagger UI. This provides administrators and developers with greater control over kernel instances.
+
+**Key Changes:**
+- Added new endpoints to the `KernelController` to create kernels programmatically:
+  - `POST /api/kernel/create` - Create a kernel with simplified options using the new `CreateKernelRequest` model
+  - `POST /api/kernel/create/full` - Create a kernel with full configuration options using the complete `UserKernelConfig` model
+- Created a new request model `CreateKernelRequest` to simplify kernel creation from Swagger UI
+- Implemented automatic saving of kernel configurations during creation
+- Added proper error handling and validation for kernel creation requests
+- Ensured created kernels reflect user-specified parameters like model options and plugins
+
+**Benefits:**
+- Ability to create kernels on-demand through Swagger UI
+- More control over kernel lifecycle for testing and development
+- Simpler API for creating kernels with default options
+- Advanced API for creating fully customized kernels
+- Easy kernel instance management for administrators
+
 ### 2025-03-21: Per-User Kernel Implementation
 
 Added a comprehensive per-user kernel management system according to the design in the class diagram. This allows each user to have their own isolated Semantic Kernel instance with user-specific configurations for AI models, plugins, and other settings.
