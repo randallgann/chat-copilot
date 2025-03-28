@@ -7,6 +7,34 @@ This changelog serves as a reference for developers working on Chat Copilot to t
 
 ## Changes
 
+### 2025-03-28: Docker Build Fix for Preview Packages
+
+Fixed an issue with Docker builds failing due to Semantic Kernel preview package dependencies.
+
+**Key Changes:**
+- Updated `docker/webapi/Dockerfile.simple` to properly handle preview/alpha packages
+- Added proper copying of `Directory.Build.props` and `Directory.Packages.props` to the Docker build context
+- Created a custom NuGet.config directly in the container with `includePrerelease` set to `true`
+- Fixed package restore errors for Microsoft.SemanticKernel.* preview and alpha packages
+
+**Fix Details:**
+```dockerfile
+# Copy central package management files
+COPY Directory.Build.props .
+COPY Directory.Packages.props .
+
+# Create a custom NuGet.config that enables preview packages
+RUN echo '<?xml version="1.0" encoding="utf-8"?><configuration><packageSources><clear /><add key="nuget.org" value="https://api.nuget.org/v3/index.json" /></packageSources><packageSourceMapping><packageSource key="nuget.org"><package pattern="*" /></packageSource></packageSourceMapping><config><add key="globalPackagesFolder" value="/src/nuget-packages" /><add key="includePrerelease" value="true" /></config><packageRestore><add key="enabled" value="True" /><add key="automatic" value="True" /></packageRestore></configuration>' > /src/NuGet.config
+
+# Use the custom NuGet.config
+RUN dotnet restore webapi/CopilotChatWebApi.csproj --configfile "/src/NuGet.config"
+```
+
+**Benefits:**
+- Fixed Docker build errors with Semantic Kernel preview/alpha packages
+- Ensured Docker builds respect central package version management
+- Documented solution for similar issues in the future
+
 ### 2025-03-21: Context-Specific Chat Sessions and Kernels
 
 Enhanced the application architecture to support context-specific chat sessions and kernels. This allows users to create different chat environments for different contexts (e.g., different YouTube channels), each with its own configuration, memory, and conversation history.
