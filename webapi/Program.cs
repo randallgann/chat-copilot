@@ -46,8 +46,13 @@ public sealed class Program
             .AddSemanticKernelServices()
             .AddKernelMemoryServices();
 
-        // Add SignalR as the real time relay service
-        builder.Services.AddSignalR();
+        // Add SignalR as the real time relay service with optimized HTTP WebSocket settings
+        builder.Services.AddSignalR(options =>
+        {
+            options.EnableDetailedErrors = true;
+            options.KeepAliveInterval = TimeSpan.FromMinutes(1);
+            options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
+        });
 
         // Add AppInsights telemetry
         builder.Services

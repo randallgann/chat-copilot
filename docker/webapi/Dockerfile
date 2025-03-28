@@ -4,14 +4,14 @@ WORKDIR /app
 EXPOSE 8080
 
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080
-ENV ASPNETCORE_ENVIRONMENT=Production
+ENV ASPNETCORE_ENVIRONMENT=Development
 
 # 2) Build stage
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG configuration=Release
 WORKDIR /src
-# generate dev-certs for https
-RUN dotnet dev-certs https
+# No need for HTTPS dev certs as we're using HTTP
+# RUN dotnet dev-certs https
 
 # Copy csproj files, then restore
 COPY webapi/CopilotChatWebApi.csproj webapi/
@@ -42,5 +42,6 @@ FROM base AS final
 ENV Kestrel__Endpoints__Http__Url=http://0.0.0.0:8080
 WORKDIR /app
 COPY --from=publish /app/publish .
-COPY --from=publish /root/.dotnet/corefx/cryptography/x509stores/my/* /root/.dotnet/corefx/cryptography/x509stores/my/
+# No need to copy HTTPS certificates
+# COPY --from=publish /root/.dotnet/corefx/cryptography/x509stores/my/* /root/.dotnet/corefx/cryptography/x509stores/my/
 ENTRYPOINT ["dotnet", "CopilotChatWebApi.dll"]
