@@ -7,6 +7,55 @@ This changelog serves as a reference for developers working on Chat Copilot to t
 
 ## Changes
 
+### 2025-03-28: HTTP-only Configuration with SignalR Optimization
+
+Configured the webapi to use HTTP-only communication and optimized SignalR for in-cluster communication.
+
+**Key Changes:**
+- Removed HTTPS requirements to support cluster-internal communication
+- Configured CORS to allow any origin during development
+- Enhanced SignalR settings for optimal WebSocket performance
+- Updated Docker configuration to remove HTTPS dependencies
+
+**Implementation Details:**
+- Changed Kestrel configuration to use HTTP on port 8080 with binding to all interfaces:
+  ```json
+  "Kestrel": {
+    "Endpoints": {
+      "Http": {
+        "Url": "http://0.0.0.0:8080"
+      }
+    }
+  }
+  ```
+- Updated CORS service configuration to properly handle wildcard origin:
+  ```csharp
+  if (allowedOrigins.Length == 1 && allowedOrigins[0] == "*")
+  {
+      // Allow any origin
+      policy.AllowAnyOrigin()
+          .WithMethods("POST", "GET", "PUT", "DELETE", "PATCH")
+          .AllowAnyHeader();
+  }
+  ```
+- Optimized SignalR for HTTP WebSockets:
+  ```csharp
+  builder.Services.AddSignalR(options =>
+  {
+      options.EnableDetailedErrors = true;
+      options.KeepAliveInterval = TimeSpan.FromMinutes(1);
+      options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
+  });
+  ```
+- Removed HTTPS certificate handling from Docker build
+
+**Benefits:**
+- Simplified deployment in Kubernetes or Docker environments
+- Eliminated need for HTTPS certificates in development/testing
+- Improved real-time communication performance
+- Allowed any frontend service to connect during development
+- Reduced configuration complexity for in-cluster communication
+
 ### 2025-03-28: Docker Build Fix for Preview Packages
 
 Fixed an issue with Docker builds failing due to Semantic Kernel preview package dependencies.
