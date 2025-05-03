@@ -88,8 +88,8 @@ public class ChatHistoryController : ControllerBase
 
         // Create a new chat session
         var newChat = new ChatSession(
-            chatParameters.Title, 
-            this._promptOptions.SystemDescription, 
+            chatParameters.Title,
+            this._promptOptions.SystemDescription,
             chatParameters.ContextId); // Pass the contextId if provided
         await this._sessionRepository.CreateAsync(newChat);
 
@@ -170,7 +170,7 @@ public class ChatHistoryController : ControllerBase
 
         return this.Ok(chats);
     }
-    
+
     /// <summary>
     /// Get chat sessions associated with the logged in user filtered by context ID.
     /// </summary>
@@ -204,12 +204,14 @@ public class ChatHistoryController : ControllerBase
         [FromQuery] int skip = 0,
         [FromQuery] int count = -1)
     {
-        var chatMessages = await this._messageRepository.FindByChatIdAsync(chatId.ToString(), skip, count);
-        if (!chatMessages.Any())
+        // First verify the chat exists
+        ChatSession? chat = null;
+        if (!await this._sessionRepository.TryFindByIdAsync(chatId.ToString(), callback: v => chat = v))
         {
-            return this.NotFound($"No messages found for chat id '{chatId}'.");
+            return this.NotFound($"No chat session found for chat id '{chatId}'.");
         }
 
+        var chatMessages = await this._messageRepository.FindByChatIdAsync(chatId.ToString(), skip, count);
         return this.Ok(chatMessages);
     }
 

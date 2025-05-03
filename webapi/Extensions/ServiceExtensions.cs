@@ -150,7 +150,8 @@ public static class CopilotChatServiceExtensions
                             // Allow any origin
                             policy.AllowAnyOrigin()
                                 .WithMethods("POST", "GET", "PUT", "DELETE", "PATCH")
-                                .AllowAnyHeader();
+                                .AllowAnyHeader()
+                                .AllowCredentials();
                         }
                         else
                         {
@@ -238,7 +239,7 @@ public static class CopilotChatServiceExtensions
         // Register repositories
         var chatParticipantRepository = new ChatParticipantRepository(chatParticipantStorageContext);
         services.AddSingleton<ChatParticipantRepository>(chatParticipantRepository);
-        
+
         services.AddSingleton<ChatSessionRepository>(new ChatSessionRepository(chatSessionStorageContext, chatParticipantRepository));
         services.AddSingleton<ChatMessageRepository>(new ChatMessageRepository(chatMessageStorageContext));
         services.AddSingleton<ChatMemorySourceRepository>(new ChatMemorySourceRepository(chatMemorySourceStorageContext));

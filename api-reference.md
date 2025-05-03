@@ -33,11 +33,16 @@ All endpoints require authentication. The user ID is used to manage user-specifi
   {
     "input": "Your message here",
     "variables": [
+      { "key": "messageType", "value": "Message" },
       { "key": "variable-name", "value": "variable-value" }
     ],
     "contextId": "optional-context-id"
   }
   ```
+  **Important**: The `messageType` variable is required. Valid values are:
+  - `Message`: Standard chat message (most common)
+  - `Plan`: A message representing a plan
+  - `Document`: A message related to uploaded documents
 - **Response**: `AskResult` object
   ```json
   {

@@ -75,6 +75,23 @@ public class ChatController : ControllerBase, IDisposable
     /// <param name="ask">Prompt along with its parameters.</param>
     /// <param name="chatId">Chat ID.</param>
     /// <returns>Results containing the response from the model.</returns>
+    /// <remarks>
+    /// Sample request:
+    ///
+    ///     POST /chats/{chatId}/messages
+    ///     {
+    ///        "input": "Your message here",
+    ///        "variables": [
+    ///          {
+    ///            "key": "messageType",
+    ///            "value": "Message"
+    ///          }
+    ///        ],
+    ///        "contextId": "default"
+    ///     }
+    ///
+    /// Note: The `messageType` variable is REQUIRED. Valid values are "Message" (standard), "Plan", or "Document".
+    /// </remarks>
     [Route("chats/{chatId:guid}/messages")]
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status200OK)]

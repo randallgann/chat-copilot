@@ -7,6 +7,36 @@ This changelog serves as a reference for developers working on Chat Copilot to t
 
 ## Changes
 
+### 2025-05-02: API Request Format Documentation for Chat Messages
+
+Added documentation for the required request format when posting messages to the chat endpoint.
+
+**Key Details:**
+- The POST endpoint for chat messages (`/chats/{chatId}/messages`) requires a `messageType` parameter.
+- This parameter must be provided as a key-value pair in the `variables` array of the request body.
+- Valid messageType values are "Message" (standard chat), "Plan", or "Document" (for uploaded documents).
+
+**Correct Request Format:**
+```json
+{
+  "input": "Your message text here",
+  "variables": [
+    {
+      "key": "messageType",
+      "value": "Message"
+    }
+  ],
+  "contextId": "default"
+}
+```
+
+**Implementation Details:**
+- The `ChatPlugin.ChatAsync` method requires a `messageType` parameter that is passed from the variables collection.
+- This value determines how the message is processed and stored in the chat history.
+- Failure to include the messageType results in a "Missing argument for function parameter 'messageType'" error.
+
+## Changes
+
 ### 2025-03-28: HTTP-only Configuration with SignalR Optimization
 
 Configured the webapi to use HTTP-only communication and optimized SignalR for in-cluster communication.

@@ -8,6 +8,32 @@
 - **Lint frontend**: `cd webapp && yarn lint`
 - **Format frontend**: `cd webapp && yarn format:fix`
 
+## API Usage Notes
+
+### Chat Messages API
+
+When sending messages to the chat endpoint (`POST /chats/{chatId}/messages`), you must include a `messageType` parameter in the variables array. The correct format is:
+
+```json
+{
+  "input": "Your message text here",
+  "variables": [
+    {
+      "key": "messageType",
+      "value": "Message"
+    }
+  ],
+  "contextId": "default"
+}
+```
+
+Valid message types:
+- `Message`: Standard chat message (most common)
+- `Plan`: A message representing a plan
+- `Document`: A message related to uploaded documents
+
+This format is required because the underlying `ChatPlugin.ChatAsync` method expects a `messageType` parameter that gets passed from the variables collection. Without this parameter, you'll receive a "Missing argument for function parameter 'messageType'" error.
+
 ## Code Style
 - **C#**: Use .NET analyzers (already enabled in project)
 - **TypeScript**: Use ESLint and Prettier with project settings
