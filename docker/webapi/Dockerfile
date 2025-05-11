@@ -44,4 +44,12 @@ WORKDIR /app
 COPY --from=publish /app/publish .
 # No need to copy HTTPS certificates
 # COPY --from=publish /root/.dotnet/corefx/cryptography/x509stores/my/* /root/.dotnet/corefx/cryptography/x509stores/my/
+
+# Create a directory for the GCP service account key
+RUN mkdir -p /app/secrets
+
+# Define the default path for the GCP service account key
+# This can be overridden when running the container by setting GCP__ServiceAccountKeyPath
+ENV GCP__ServiceAccountKeyPath=/app/secrets/gcp-sa-key.json
+
 ENTRYPOINT ["dotnet", "CopilotChatWebApi.dll"]

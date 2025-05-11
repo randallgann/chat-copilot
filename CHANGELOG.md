@@ -7,6 +7,38 @@ This changelog serves as a reference for developers working on Chat Copilot to t
 
 ## Changes
 
+### 2025-05-11: Google Cloud Secret Manager Integration for Secure API Key Management
+
+Implemented secure API key management using Google Cloud Secret Manager, allowing for more secure deployment in production environments.
+
+**Key Changes:**
+- Added Google Cloud Secret Manager integration for retrieving OpenAI API keys
+- Created a robust fallback mechanism for development environments
+- Improved error handling and debugging for secret retrieval
+- Updated Docker configuration to support service account key mounting
+- Configured Qdrant vector database integration for document storage
+
+**Implementation Details:**
+- Created GoogleCloudSecretManagerExtensions class with methods to:
+  - Authenticate with GCP using service account key files
+  - Retrieve secrets from GCP Secret Manager
+  - Validate API keys to ensure proper format
+  - Gracefully fall back to environment variables if needed
+- Enhanced configuration pipeline to prioritize secrets from GCP Secret Manager
+- Added support for explicit secret path configuration via environment variables
+- Created directory structure in Docker container for mounting service account keys
+- Configured Qdrant endpoint to use proper Docker networking
+
+**Benefits:**
+- Increased security by removing hardcoded API keys from configuration files
+- Better separation of development and production environments
+- More robust handling of API key retrieval failures
+- Enhanced logging and debugging for secret management
+- Proper integration with Docker containerization
+- Support for vector storage and retrieval in Qdrant
+
+## Changes
+
 ### 2025-05-02: API Request Format Documentation for Chat Messages
 
 Added documentation for the required request format when posting messages to the chat endpoint.
