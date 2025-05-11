@@ -33,6 +33,29 @@ internal static class ConfigExtensions
                 optional: true,
                 reloadOnChange: true);
 
+            bool gcpKeyRetrieved = false;
+
+            // Add Google Cloud Secret Manager integration
+            string? gcpProjectId = builderContext.Configuration["GCP:ProjectId"];
+            if (!string.IsNullOrWhiteSpace(gcpProjectId))
+            {
+                // Since we don't have access to the logger service yet,
+                // we'll log at the console level for now
+                Console.WriteLine($"Configuring Google Cloud Secret Manager with project ID: {gcpProjectId}");
+                gcpKeyRetrieved = configBuilder.AddGoogleCloudSecretManager(gcpProjectId);
+            }
+
+            // Add fallback OpenAI key ONLY if Secret Manager failed or is not configured
+            if (!gcpKeyRetrieved)
+            {
+                Console.WriteLine("GCP Secret Manager key retrieval unsuccessful, trying fallback methods...");
+                configBuilder.AddFallbackOpenAIKey();
+            }
+            else
+            {
+                Console.WriteLine("Successfully retrieved key from GCP Secret Manager, skipping fallbacks");
+            }
+
             // For settings from Key Vault, see https://learn.microsoft.com/en-us/aspnet/core/security/key-vault-configuration?view=aspnetcore-8.0
             string? keyVaultUri = builderContext.Configuration["Service:KeyVault"];
             if (!string.IsNullOrWhiteSpace(keyVaultUri))
