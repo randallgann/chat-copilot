@@ -7,6 +7,30 @@ This changelog serves as a reference for developers working on Chat Copilot to t
 
 ## Changes
 
+### 2025-05-15: Fixed Critical Bug in Volatile Storage Message Retrieval
+
+Fixed a bug in the chat message retrieval system where messages stored in volatile memory weren't being properly returned to clients.
+
+**Key Changes:**
+- Modified `VolatileCopilotChatMessageContext.QueryEntitiesAsync` to immediately materialize query results
+- Replaced `Task.Run` with `Task.FromResult` to prevent async threading issues
+- Added diagnostic logging to track message retrieval pipeline
+
+**Implementation Details:**
+- The original implementation used LINQ with deferred execution, causing potential race conditions
+- When the query was defined and when it was actually executed, the state of the collection could change
+- Fixed by using `.ToList()` to immediately materialize each step of the LINQ query
+- Ensures that the filtering, ordering, and pagination operations execute immediately
+- Replaced asynchronous `Task.Run` with synchronous `Task.FromResult` to maintain execution context
+
+**Benefits:**
+- Fixed empty results being returned even when messages existed in the repository
+- Improved reliability of in-memory storage for development/testing
+- Added comprehensive logging for message retrieval debugging
+- Eliminated potential race conditions in async message handling
+
+## Changes
+
 ### 2025-05-11: Google Cloud Secret Manager Integration for Secure API Key Management
 
 Implemented secure API key management using Google Cloud Secret Manager, allowing for more secure deployment in production environments.

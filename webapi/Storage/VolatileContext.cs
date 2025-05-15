@@ -102,8 +102,34 @@ public class VolatileCopilotChatMessageContext : VolatileContext<CopilotChatMess
     /// <inheritdoc/>
     public Task<IEnumerable<CopilotChatMessage>> QueryEntitiesAsync(Func<CopilotChatMessage, bool> predicate, int skip, int count)
     {
-        return Task.Run<IEnumerable<CopilotChatMessage>>(
-            () => this.Entities.Values
-                .Where(predicate).OrderByDescending(m => m.Timestamp).Skip(skip).Take(count));
+        Console.WriteLine($"DEBUG VolatileContext: QueryEntitiesAsync called with skip={skip}, count={count}");
+        
+        // Create intermediate results to debug the stages of the pipeline
+        var allEntities = this.Entities.Values.ToList();
+        Console.WriteLine($"DEBUG VolatileContext: Total entities: {allEntities.Count}");
+        
+        var filteredEntities = allEntities.Where(predicate).ToList();
+        Console.WriteLine($"DEBUG VolatileContext: After filtering: {filteredEntities.Count}");
+        
+        var orderedEntities = filteredEntities.OrderByDescending(m => m.Timestamp).ToList();
+        Console.WriteLine($"DEBUG VolatileContext: After ordering: {orderedEntities.Count}");
+        
+        var skippedEntities = orderedEntities.Skip(skip).ToList();
+        Console.WriteLine($"DEBUG VolatileContext: After skipping {skip}: {skippedEntities.Count}");
+        
+        IEnumerable<CopilotChatMessage> result;
+        if (count >= 0)
+        {
+            result = skippedEntities.Take(count).ToList();
+            Console.WriteLine($"DEBUG VolatileContext: After taking {count}: {(result as List<CopilotChatMessage>)?.Count ?? 0}");
+        }
+        else
+        {
+            result = skippedEntities;
+            Console.WriteLine($"DEBUG VolatileContext: Taking all (count={count}): {skippedEntities.Count}");
+        }
+        
+        // Return result inside Task.Run to maintain the same behavior
+        return Task.FromResult(result);
     }
 }
