@@ -31,4 +31,13 @@ public interface IKernelManager
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     Task ClearAllKernelsAsync();
+    
+    /// <summary>
+    /// Delete Qdrant collections for a user.
+    /// </summary>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="contextId">Optional context ID. If null, only deletes the default context collection.</param>
+    /// <param name="deleteAllUserContexts">If true, deletes all collections for the user regardless of contextId.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task DeleteUserCollectionsAsync(string userId, string? contextId = null, bool deleteAllUserContexts = false);
 }

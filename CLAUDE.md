@@ -8,6 +8,79 @@
 - **Lint frontend**: `cd webapp && yarn lint`
 - **Format frontend**: `cd webapp && yarn format:fix`
 
+## Authentication Notes
+
+When the authentication type is set to `None` in the configuration, all requests are processed by the `PassThroughAuthenticationHandler`, which supports two custom headers:
+
+- `X-User-Id`: Custom user ID for the request (if not provided, uses default ID "c05c61eb-65e4-4223-915a-fe72b0c9ece1")
+- `X-User-Name`: Custom user name for the request (if not provided, uses "Default User")
+
+These headers allow you to simulate different users even when using the pass-through authentication handler.
+
+## Kernel & Qdrant Collection Management
+
+Each user can have multiple kernels, each associated with a unique context ID. Each user-context kernel pair gets a dedicated Qdrant collection for vector storage, providing proper data isolation.
+
+### Qdrant Collection Naming
+
+Collections are automatically created with a predictable naming pattern:
+```
+cc_{normalizedUserId}_{contextId}_{type}
+```
+
+Where:
+- `cc_` is a prefix identifying Chat Copilot collections
+- `normalizedUserId` is the user ID with special characters replaced by underscores
+- `contextId` is the context ID (defaults to "default" if not specified)
+- `type` is an optional collection type (defaults to "default")
+
+### API Endpoints
+
+The following endpoints are available for kernel and collection management:
+
+#### Get a User Kernel
+```
+GET /api/kernel/info?contextId={contextId}
+```
+Returns information about the current user's kernel for a specific context.
+
+#### Create/Refresh a Kernel
+```
+POST /api/kernel/create
+```
+Creates or refreshes a kernel for the current user. Body parameters:
+```json
+{
+  "contextId": "optional-context-id",
+  "settings": { /* optional custom settings */ }
+}
+```
+
+#### Release a Kernel
+```
+DELETE /api/kernel/release/{userId}?contextId={contextId}&releaseAllContexts={true|false}
+```
+Removes a kernel from memory (the Qdrant collection remains for future use).
+
+#### List Qdrant Collections
+```
+GET /api/kernel/collections
+```
+Lists all Qdrant collections for the current user.
+
+#### Delete Qdrant Collections
+```
+DELETE /api/kernel/collections/{userId}?contextId={contextId}&deleteAllContexts={true|false}
+```
+Permanently deletes Qdrant collections for a specific user.
+
+### User Isolation
+
+Each user (based on their user ID) gets isolated Qdrant collections, ensuring that:
+1. Users can't access each other's vector data
+2. Each context (like a specific chat) can have its own isolated memory
+3. Vector data persists even when kernels are released or the app restarts
+
 ## API Usage Notes
 
 ### Chat Messages API

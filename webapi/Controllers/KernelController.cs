@@ -411,6 +411,78 @@ public class KernelController : ControllerBase
             return this.StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to clear all kernels" });
         }
     }
+    
+    /// <summary>
+    /// Lists all Qdrant collections for the current user.
+    /// </summary>
+    /// <returns>A list of collections.</returns>
+    [Route("api/kernel/collections")]
+    [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListCollections()
+    {
+        try
+        {
+            // Get the Qdrant collection manager from service provider
+            var qdrantManager = this.HttpContext.RequestServices.GetRequiredService<QdrantCollectionManager>();
+            var collections = await qdrantManager.ListCollectionsAsync();
+            
+            // Filter for only this user's collections
+            string userId = this._authInfo.UserId;
+            var collectionPrefix = $"cc_{Models.Storage.QdrantCollectionName.NormalizeId(userId)}_";
+            
+            var userCollections = collections.Where(c => c.StartsWith(collectionPrefix))
+                .ToList();
+            
+            return this.Ok(new { collections = userCollections });
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error listing Qdrant collections for user {UserId}", this._authInfo.UserId);
+            return this.StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to list collections" });
+        }
+    }
+    
+    /// <summary>
+    /// Delete Qdrant collections for a user.
+    /// </summary>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="contextId">Optional context ID. If not provided, deletes only the default context collection.</param>
+    /// <param name="deleteAllContexts">If true, deletes all collections for the user regardless of contextId.</param>
+    /// <returns>A success indication.</returns>
+    [Route("api/kernel/collections/{userId}")]
+    [HttpDelete]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> DeleteUserCollections(
+        string userId, 
+        [FromQuery] string? contextId = null, 
+        [FromQuery] bool deleteAllContexts = false)
+    {
+        try
+        {
+            // Ensure only the user themselves or an admin can do this
+            if (userId != this._authInfo.UserId && !IsAdminUser())
+            {
+                return this.Forbid();
+            }
+            
+            await this._kernelManager.DeleteUserCollectionsAsync(userId, contextId, deleteAllContexts);
+            
+            this._logger.LogInformation(
+                "Deleted Qdrant collections for user {UserId} with context {ContextId}, deleteAllContexts: {DeleteAllContexts}", 
+                userId, contextId ?? "default", deleteAllContexts);
+            
+            return this.NoContent();
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error deleting Qdrant collections for user {UserId} with context {ContextId}", 
+                userId, contextId ?? "default");
+            return this.StatusCode(StatusCodes.Status500InternalServerError, 
+                new { error = $"Failed to delete Qdrant collections for user {userId} with context {contextId ?? "default"}" });
+        }
+    }
 
     #region Helper Methods
 

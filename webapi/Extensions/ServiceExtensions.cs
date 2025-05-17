@@ -313,6 +313,9 @@ public static class CopilotChatServiceExtensions
 
         // Register the user kernel config repository with explicit instance
         services.AddSingleton<IUserKernelConfigRepository>(new UserKernelConfigRepository(userKernelConfigStorageContext));
+        
+        // Register the Qdrant collection manager
+        services.AddSingleton<QdrantCollectionManager>();
 
         // Register the kernel manager as a singleton
         services.AddSingleton<IKernelManager, KernelManager>();

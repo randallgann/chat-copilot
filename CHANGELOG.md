@@ -7,6 +7,76 @@ This changelog serves as a reference for developers working on Chat Copilot to t
 
 ## Changes
 
+### 2025-05-16: Refactored Qdrant Collection Naming to Object-Oriented Approach
+
+Improved Qdrant collection naming system by implementing an object-oriented approach with QdrantCollectionName class.
+
+**Key Changes:**
+- Created QdrantCollectionName class to encapsulate collection name components
+- Updated collection naming pattern to use prefix "cc_" (Chat Copilot)
+- Added support for collection types beyond just user-context pairs
+- Improved parsing and validation of collection names
+
+**Implementation Details:**
+- Collections now follow a `cc_{userId}_{contextId}_{type}` naming pattern
+- Added TryParse method for converting string names back to objects
+- Centralized NormalizeId functionality in the QdrantCollectionName class
+- Updated QdrantCollectionManager to use the new object-oriented approach
+
+**Benefits:**
+- Better encapsulation of naming logic
+- More flexibility for future changes to naming conventions
+- Support for different collection types (chat, document, etc.)
+- Improved maintainability with proper object-oriented design
+
+### 2025-05-16: Added Per-User Qdrant Collections for Kernel Memory
+
+Implemented automatic creation of user-specific Qdrant collections for each kernel, ensuring proper data isolation across users and contexts.
+
+**Key Changes:**
+- Created QdrantCollectionManager to handle collection lifecycle and naming
+- Updated KernelManager to automatically create Qdrant collections for each user-context pair
+- Added API endpoints for listing and managing Qdrant collections
+- Each user now gets dedicated vector storage with predictable naming convention
+
+**Implementation Details:**
+- Collections follow a `user_{normalizedUserId}_{contextId}` naming pattern
+- Collections are created automatically when a kernel is created
+- Implemented HTTP endpoints for collection management:
+  - GET /api/kernel/collections - Lists all collections for current user
+  - DELETE /api/kernel/collections/{userId} - Deletes collections for a specific user
+- Added codebase security by verifying user permissions for collection operations
+
+**Benefits:**
+- Proper data isolation between users
+- Improved security and privacy for multi-user deployments
+- Collections persist between kernel usage (unlike in-memory kernels which are cleaned up)
+- Better memory organization and management for context-specific data
+
+### 2025-05-16: Improved PassThroughAuthenticationHandler with Custom User Headers
+
+Enhanced the PassThroughAuthenticationHandler to support custom user IDs and names via HTTP headers, resolving issues with kernel user identification.
+
+**Key Changes:**
+- Modified PassThroughAuthenticationHandler to accept X-User-Id and X-User-Name headers
+- Added fallback to default values when headers are not present
+- Updated documentation in CLAUDE.md to explain the new feature
+- Fixed issue where all kernels were being created with the same user ID
+
+**Implementation Details:**
+- Added constants for header names (X-User-Id and X-User-Name)
+- Implemented header value extraction in HandleAuthenticateAsync method
+- Added logging for when custom headers are used
+- Maintains backward compatibility by using defaults when headers are absent
+
+**Benefits:**
+- Enables testing of multi-user scenarios without using full authentication
+- Resolves issue where all kernels were created with the same user ID
+- Simplifies development and testing with multiple simulated users
+- Maintains compatibility with existing code that relies on default values
+
+## Changes
+
 ### 2025-05-15: Fixed Critical Bug in Volatile Storage Message Retrieval
 
 Fixed a bug in the chat message retrieval system where messages stored in volatile memory weren't being properly returned to clients.

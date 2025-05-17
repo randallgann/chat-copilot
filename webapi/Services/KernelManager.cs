@@ -19,6 +19,7 @@ public class KernelManager : IKernelManager
     private readonly IServiceProvider _serviceProvider;
     private readonly IUserKernelConfigRepository _configRepository;
     private readonly SemanticKernelProvider _semanticKernelProvider;
+    private readonly QdrantCollectionManager _qdrantCollectionManager;
 
     /// <summary>
     /// Initializes a new instance of the KernelManager class.
@@ -27,16 +28,19 @@ public class KernelManager : IKernelManager
     /// <param name="serviceProvider">The service provider.</param>
     /// <param name="configRepository">The user kernel config repository.</param>
     /// <param name="semanticKernelProvider">The semantic kernel provider.</param>
+    /// <param name="qdrantCollectionManager">The Qdrant collection manager.</param>
     public KernelManager(
         ILogger<KernelManager> logger,
         IServiceProvider serviceProvider,
         IUserKernelConfigRepository configRepository,
-        SemanticKernelProvider semanticKernelProvider)
+        SemanticKernelProvider semanticKernelProvider,
+        QdrantCollectionManager qdrantCollectionManager)
     {
         this._logger = logger;
         this._serviceProvider = serviceProvider;
         this._configRepository = configRepository;
         this._semanticKernelProvider = semanticKernelProvider;
+        this._qdrantCollectionManager = qdrantCollectionManager;
     }
 
     /// <inheritdoc/>
@@ -55,7 +59,7 @@ public class KernelManager : IKernelManager
     }
 
     /// <inheritdoc/>
-    public Task ReleaseUserKernelAsync(string userId, string? contextId = null, bool releaseAllUserContexts = false)
+    public async Task ReleaseUserKernelAsync(string userId, string? contextId = null, bool releaseAllUserContexts = false)
     {
         if (releaseAllUserContexts)
         {
@@ -64,6 +68,14 @@ public class KernelManager : IKernelManager
             foreach (var key in keysToRemove)
             {
                 this._userKernels.TryRemove(key, out _);
+                
+                // Extract contextId from the key
+                string[] parts = key.Split(':');
+                if (parts.Length == 2)
+                {
+                    // Don't need to delete Qdrant collections when releasing kernels
+                    // We'll keep them for reuse when the user comes back
+                }
             }
         }
         else
@@ -72,9 +84,12 @@ public class KernelManager : IKernelManager
             contextId ??= "default";
             string key = $"{userId}:{contextId}";
             this._userKernels.TryRemove(key, out _);
+            
+            // Don't need to delete Qdrant collections when releasing kernels
+            // We'll keep them for reuse when the user comes back
         }
 
-        return Task.CompletedTask;
+        await Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -82,6 +97,43 @@ public class KernelManager : IKernelManager
     {
         this._userKernels.Clear();
         return Task.CompletedTask;
+    }
+    
+    /// <summary>
+    /// Delete Qdrant collections for a user.
+    /// </summary>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="contextId">Optional context ID. If null, only deletes the default context collection.</param>
+    /// <param name="deleteAllUserContexts">If true, deletes all collections for the user regardless of contextId.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task DeleteUserCollectionsAsync(string userId, string? contextId = null, bool deleteAllUserContexts = false)
+    {
+        if (deleteAllUserContexts)
+        {
+            // Get all collections and filter by userId
+            var collections = await this._qdrantCollectionManager.ListCollectionsAsync();
+            
+            // Filter collections by user ID prefix
+            var collectionPrefix = $"cc_{Models.Storage.QdrantCollectionName.NormalizeId(userId)}_";
+            var userCollections = collections.Where(c => c.StartsWith(collectionPrefix));
+            
+            foreach (var collection in userCollections)
+            {
+                // Extract contextId from the collection name (last part after last underscore)
+                string[] parts = collection.Split('_');
+                if (parts.Length >= 3)
+                {
+                    string extractedContextId = parts.Last();
+                    await this._qdrantCollectionManager.DeleteCollectionAsync(userId, extractedContextId);
+                }
+            }
+        }
+        else
+        {
+            // Delete only the specific context's collection
+            contextId ??= "default";
+            await this._qdrantCollectionManager.DeleteCollectionAsync(userId, contextId);
+        }
     }
 
     /// <summary>
@@ -92,6 +144,14 @@ public class KernelManager : IKernelManager
     /// <returns>A new user kernel info.</returns>
     private async Task<UserKernelInfo> CreateUserKernelInfoAsync(string userId, string contextId)
     {
+        // First, ensure Qdrant collection exists for this user-context pair
+        bool collectionCreated = await this._qdrantCollectionManager.EnsureCollectionExistsAsync(userId, contextId);
+        if (!collectionCreated)
+        {
+            this._logger.LogWarning("Failed to create Qdrant collection for user {UserId} with context {ContextId}", userId, contextId);
+            // Continue anyway, as the kernel might still work with fallback storage
+        }
+        
         // Get user configuration or create default
         var userConfig = await this._configRepository.GetConfigAsync(userId, contextId);
         
