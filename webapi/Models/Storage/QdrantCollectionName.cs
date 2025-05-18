@@ -7,6 +7,7 @@ namespace CopilotChat.WebApi.Models.Storage;
 /// <summary>
 /// Represents a Qdrant collection name with component parts.
 /// This provides a structured way to create, parse, and manipulate collection names.
+/// Collection names follow the format: cc-userId-contextId-type where special characters in IDs are replaced with dashes.
 /// </summary>
 public class QdrantCollectionName
 {
@@ -48,8 +49,8 @@ public class QdrantCollectionName
     {
         result = null;
 
-        // Expected format: cc_{userId}_{contextId}_{type}
-        string[] parts = collectionName.Split('_');
+        // Expected format: cc-{userId}-{contextId}-{type}
+        string[] parts = collectionName.Split('-');
         if (parts.Length < 4 || parts[0] != "cc")
         {
             return false;
@@ -63,10 +64,10 @@ public class QdrantCollectionName
     /// Normalize an ID to be valid for Qdrant collection names.
     /// </summary>
     /// <param name="id">The ID to normalize</param>
-    /// <returns>A normalized ID with only letters, numbers, and underscores</returns>
+    /// <returns>A normalized ID with only letters, numbers, and dashes</returns>
     public static string NormalizeId(string id)
     {
-        // Replace invalid characters with underscores
+        // Replace invalid characters with dashes to match Microsoft.KernelMemory.MemoryDb.Qdrant behavior
         StringBuilder sb = new StringBuilder();
         foreach (char c in id)
         {
@@ -76,7 +77,7 @@ public class QdrantCollectionName
             }
             else
             {
-                sb.Append('_');
+                sb.Append('-');
             }
         }
 
@@ -86,14 +87,14 @@ public class QdrantCollectionName
     /// <summary>
     /// Convert the object to a valid Qdrant collection name string.
     /// </summary>
-    /// <returns>A properly formatted collection name</returns>
+    /// <returns>A properly formatted collection name using the format cc-userId-contextId-type</returns>
     public override string ToString()
     {
         string normalizedUserId = NormalizeId(UserId);
         string normalizedContextId = NormalizeId(ContextId);
         string normalizedType = NormalizeId(Type);
         
-        // Format: cc_userId_contextId_type
-        return $"cc_{normalizedUserId}_{normalizedContextId}_{normalizedType}";
+        // Format: cc-userId-contextId-type (where special characters in IDs are replaced with dashes)
+        return $"cc-{normalizedUserId}-{normalizedContextId}-{normalizedType}";
     }
 }

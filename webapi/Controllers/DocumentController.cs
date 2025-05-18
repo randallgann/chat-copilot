@@ -40,6 +40,8 @@ public class DocumentController : ControllerBase
     private readonly DocumentTypeProvider _documentTypeProvider;
     private readonly IAuthInfo _authInfo;
     private readonly IContentSafetyService _contentSafetyService;
+    private readonly ChatSessionRepository _chatSessionRepository;
+    private readonly QdrantCollectionManager _qdrantCollectionManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DocumentImportController"/> class.
@@ -55,7 +57,8 @@ public class DocumentController : ControllerBase
         ChatMessageRepository messageRepository,
         ChatParticipantRepository participantRepository,
         DocumentTypeProvider documentTypeProvider,
-        IContentSafetyService contentSafetyService)
+        IContentSafetyService contentSafetyService,
+        QdrantCollectionManager qdrantCollectionManager)
     {
         this._logger = logger;
         this._options = documentMemoryOptions.Value;
@@ -68,6 +71,8 @@ public class DocumentController : ControllerBase
         this._documentTypeProvider = documentTypeProvider;
         this._authInfo = authInfo;
         this._contentSafetyService = contentSafetyService;
+        this._chatSessionRepository = sessionRepository; // Reusing sessionRepository for chatSessionRepository
+        this._qdrantCollectionManager = qdrantCollectionManager;
     }
 
     /// <summary>
@@ -229,8 +234,27 @@ public class DocumentController : ControllerBase
             try
             {
                 using var stream = formFile.OpenReadStream();
+                
+                // Get user ID and determine collection name
+                string userId = this._authInfo.UserId;
+                string collectionName = this._promptOptions.MemoryIndexName;
+                
+                // Get the chat session to retrieve contextId
+                ChatSession? chatSession = null;
+                await this._chatSessionRepository.TryFindByIdAsync(chatId.ToString(), callback: v => chatSession = v);
+                string contextId = chatSession?.ContextId ?? "default";
+                
+                // Use user-specific collection if userId is available
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    // Ensure the collection exists
+                    await this._qdrantCollectionManager.EnsureCollectionExistsAsync(userId, contextId, "memory");
+                    collectionName = this._qdrantCollectionManager.GetCollectionNameString(userId, contextId, "memory");
+                    this._logger.LogInformation("Using user-specific collection {CollectionName} for document import", collectionName);
+                }
+                
                 await memoryClient.StoreDocumentAsync(
-                    this._promptOptions.MemoryIndexName,
+                    collectionName,
                     memorySource.Id,
                     chatId.ToString(),
                     this._promptOptions.DocumentMemoryName,
