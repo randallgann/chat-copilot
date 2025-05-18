@@ -108,8 +108,9 @@ internal static class SemanticKernelExtensions
                 messageRelayHubContext: sp.GetRequiredService<IHubContext<MessageRelayHub>>(),
                 promptOptions: sp.GetRequiredService<IOptions<PromptsOptions>>(),
                 documentImportOptions: sp.GetRequiredService<IOptions<DocumentMemoryOptions>>(),
-                contentSafety: sp.GetService<AzureContentSafety>(),
-                logger: sp.GetRequiredService<ILogger<ChatPlugin>>()),
+                logger: sp.GetRequiredService<ILogger<ChatPlugin>>(),
+                qdrantCollectionManager: sp.GetRequiredService<QdrantCollectionManager>(),
+                contentSafety: sp.GetService<AzureContentSafety>()),
             nameof(ChatPlugin));
 
         return kernel;

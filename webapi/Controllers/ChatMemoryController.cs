@@ -3,6 +3,7 @@
 using CopilotChat.WebApi.Auth;
 using CopilotChat.WebApi.Extensions;
 using CopilotChat.WebApi.Models.Request;
+using CopilotChat.WebApi.Models.Storage;
 using CopilotChat.WebApi.Options;
 using CopilotChat.WebApi.Storage;
 using Microsoft.AspNetCore.Authorization;
@@ -30,14 +31,29 @@ public class ChatMemoryController : ControllerBase
     /// <param name="logger">The logger.</param>
     /// <param name="promptsOptions">The prompts options.</param>
     /// <param name="chatSessionRepository">The chat session repository.</param>
+    private readonly IAuthInfo _authInfo;
+    private readonly Services.QdrantCollectionManager _qdrantCollectionManager;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ChatMemoryController"/> class.
+    /// </summary>
+    /// <param name="logger">The logger.</param>
+    /// <param name="promptsOptions">The prompts options.</param>
+    /// <param name="chatSessionRepository">The chat session repository.</param>
+    /// <param name="authInfo">The authentication info.</param>
+    /// <param name="qdrantCollectionManager">The Qdrant collection manager.</param>
     public ChatMemoryController(
         ILogger<ChatMemoryController> logger,
         IOptions<PromptsOptions> promptsOptions,
-        ChatSessionRepository chatSessionRepository)
+        ChatSessionRepository chatSessionRepository,
+        IAuthInfo authInfo,
+        Services.QdrantCollectionManager qdrantCollectionManager)
     {
         this._logger = logger;
         this._promptOptions = promptsOptions.Value;
         this._chatSessionRepository = chatSessionRepository;
+        this._authInfo = authInfo;
+        this._qdrantCollectionManager = qdrantCollectionManager;
     }
 
     /// <summary>
@@ -69,10 +85,26 @@ public class ChatMemoryController : ControllerBase
         }
 
         // Make sure the chat session exists.
-        if (!await this._chatSessionRepository.TryFindByIdAsync(chatId))
+        ChatSession? chatSession = null;
+        if (!await this._chatSessionRepository.TryFindByIdAsync(chatId, callback: v => chatSession = v))
         {
             this._logger.LogWarning("Chat session: {0} does not exist.", sanitizedChatId);
             return this.BadRequest($"Chat session: {sanitizedChatId} does not exist.");
+        }
+
+        // Get user ID from auth info
+        string userId = this._authInfo.UserId;
+        // Get the context ID from the chat session
+        string contextId = chatSession?.ContextId ?? "default";
+
+        // Determine whether to use user-specific collection
+        bool useUserCollection = !string.IsNullOrEmpty(userId);
+
+        // Ensure the user-specific collection exists if we're using it
+        if (useUserCollection)
+        {
+            await this._qdrantCollectionManager.EnsureCollectionExistsAsync(userId, contextId, "memory");
+            this._logger.LogInformation("Using user-specific collection for user {UserId} with context {ContextId}", userId, contextId);
         }
 
         // Gather the requested kernel memory.
@@ -81,19 +113,24 @@ public class ChatMemoryController : ControllerBase
         List<string> memories = new();
         try
         {
-            // Search if there is already a memory item that has a high similarity score with the new item.
-            var filter = new MemoryFilter();
-            filter.ByTag("chatid", chatId);
-            filter.ByTag("memory", memoryContainerName);
+            // Determine the collection name to use
+            string collectionName = this._promptOptions.MemoryIndexName;
 
-            var searchResult =
-                await memoryClient.SearchMemoryAsync(
-                    this._promptOptions.MemoryIndexName,
-                    "*",
-                    relevanceThreshold: 0,
-                    resultCount: -1,
-                    chatId,
-                    memoryContainerName);
+            // Use user-specific collection if we have a userId
+            if (useUserCollection)
+            {
+                collectionName = this._qdrantCollectionManager.GetCollectionNameString(userId, contextId, "memory");
+                this._logger.LogInformation("Using user-specific collection {CollectionName} for searching memories", collectionName);
+            }
+
+            // Search for memory items
+            var searchResult = await memoryClient.SearchMemoryAsync(
+                collectionName,  // Use the determined collection name
+                "*",
+                relevanceThreshold: 0,
+                resultCount: -1,
+                chatId,
+                memoryContainerName);
 
             foreach (var memory in searchResult.Results.SelectMany(c => c.Partitions))
             {
@@ -103,7 +140,7 @@ public class ChatMemoryController : ControllerBase
         catch (Exception connectorException) when (!connectorException.IsCriticalException())
         {
             // A store exception might be thrown if the collection does not exist, depending on the memory store connector.
-            this._logger.LogError(connectorException, "Cannot search collection {0}", memoryContainerName);
+            this._logger.LogError(connectorException, "Cannot search collection for user {UserId} with context {ContextId}", userId, contextId);
         }
 
         return this.Ok(memories);

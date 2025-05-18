@@ -7,6 +7,51 @@ This changelog serves as a reference for developers working on Chat Copilot to t
 
 ## Changes
 
+### 2025-05-17: Fixed Memory Storage Issues with User-Specific Qdrant Collections
+
+Fixed issues related to chat memory storage by updating the memory extraction system to consistently use user-specific Qdrant collections and correcting vector dimensions.
+
+**Key Changes:**
+- Modified QdrantCollectionName to consistently use dashes in collection names (format: cc-userId-contextId-type)
+- Updated memory extraction system to use user-specific collections instead of the global "chatmemory" collection
+- Implemented consistent collection naming across memory storage and retrieval operations
+- Enhanced ChatPlugin and SemanticChatMemoryExtractor to ensure collections exist before use
+- Fixed critical bug in QdrantCollectionManager that was using token limits instead of actual vector dimensions
+- Hardcoded the correct vector size (1536) for OpenAI's text-embedding-ada-002 model
+- Updated ChatMemoryController and DocumentController to use user-specific collections
+
+**Impact:**
+- Resolves the "chatmemory collection not found" error during chat operations
+- Fixes "vector dimension error: expected dim: 8191, got 1536" by using correct dimensions
+- Ensures proper isolation of memory data between users and contexts
+- Maintains backward compatibility with existing global collections when needed
+- Improves error handling and logging for memory operations
+
+### 2025-05-16: Implemented User-Specific Qdrant Collections for Chat Memory
+
+Enhanced the Chat plugin to use user-specific Qdrant collections for semantic memory retrieval, ensuring proper data isolation between users and contexts.
+
+**Key Changes:**
+- Updated KernelMemoryRetriever to use dedicated Qdrant collections per user and context
+- Modified Chat plugin to pass user ID to memory retrieval system
+- Enhanced KernelMemoryClientExtensions with support for user-specific collections
+- Leveraged existing QdrantCollectionManager for consistent collection naming
+
+**Implementation Details:**
+- Collections follow the naming pattern `cc_{normalizedUserId}_{contextId}_memory`
+- Added support for specifying user ID in memory retrieval methods
+- Collections are automatically created when needed and verified before use
+- Maintained backward compatibility with existing global collections
+
+**Benefits:**
+- Proper isolation of semantic memories between different users
+- Context-specific memory collections prevent cross-contamination between channels
+- Improved privacy by ensuring users can only access their own memories
+- No changes required to frontend API requests - uses existing authentication headers
+- Leverages existing authentication system for user identification
+
+## Changes
+
 ### 2025-05-16: Refactored Qdrant Collection Naming to Object-Oriented Approach
 
 Improved Qdrant collection naming system by implementing an object-oriented approach with QdrantCollectionName class.

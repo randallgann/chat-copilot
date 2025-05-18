@@ -3,8 +3,10 @@
 using System.Globalization;
 using CopilotChat.WebApi.Extensions;
 using CopilotChat.WebApi.Models.Request;
+using CopilotChat.WebApi.Models.Storage;
 using CopilotChat.WebApi.Options;
 using CopilotChat.WebApi.Plugins.Utils;
+using CopilotChat.WebApi.Services;
 using Microsoft.KernelMemory;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
@@ -20,10 +22,13 @@ internal static class SemanticChatMemoryExtractor
     /// Extract and save kernel memory.
     /// </summary>
     /// <param name="chatId">The Chat ID.</param>
+    /// <param name="memoryClient">The kernel memory client.</param>
     /// <param name="kernel">The semantic kernel.</param>
     /// <param name="kernelArguments">The Semantic Kernel context.</param>
     /// <param name="options">The prompts options.</param>
     /// <param name="logger">The logger.</param>
+    /// <param name="userId">The user ID for user-specific collections.</param>
+    /// <param name="contextId">The context ID for context-specific collections.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     public static async Task ExtractSemanticChatMemoryAsync(
         string chatId,
@@ -32,7 +37,9 @@ internal static class SemanticChatMemoryExtractor
         KernelArguments kernelArguments,
         PromptsOptions options,
         ILogger logger,
-        CancellationToken cancellationToken)
+        string userId = "",
+        string contextId = "default",
+        CancellationToken cancellationToken = default)
     {
         foreach (string memoryType in Enum.GetNames(typeof(SemanticMemoryType)))
         {
@@ -114,31 +121,47 @@ internal static class SemanticChatMemoryExtractor
         // <summary>
         // Create a memory item in the memory collection.
         // If there is already a memory item that has a high similarity score with the new item, it will be skipped.
+        // Uses user-specific collections if a userId is provided.
         // </summary>
         async Task CreateMemoryAsync(string memoryName, string memory)
         {
             try
             {
+                // Determine the collection name to use
+                string collectionName = options.MemoryIndexName;
+                
+                // Use user-specific collection if a userId is provided
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    // Format: cc-userId-contextId-memory
+                    collectionName = QdrantCollectionName.NormalizeId($"cc-{userId}-{contextId}-memory");
+                    logger.LogInformation("Using user-specific collection {CollectionName} for user {UserId}", collectionName, userId);
+                }
+                
                 // Search if there is already a memory item that has a high similarity score with the new item.
                 var searchResult =
                     await memoryClient.SearchMemoryAsync(
-                        options.MemoryIndexName,
+                        collectionName,
                         memory,
                         options.KernelMemoryRelevanceUpper,
                         resultCount: 1,
                         chatId,
                         memoryName,
+                        null,
+                        null,
+                        null,
                         cancellationToken);
 
                 if (searchResult.Results.Count == 0)
                 {
-                    await memoryClient.StoreMemoryAsync(options.MemoryIndexName, chatId, memoryName, memory, cancellationToken: cancellationToken);
+                    await memoryClient.StoreMemoryAsync(collectionName, chatId, memoryName, memory, cancellationToken: cancellationToken);
+                    logger.LogInformation("Stored memory in collection {CollectionName} for chat {ChatId}", collectionName, chatId);
                 }
             }
             catch (Exception exception) when (!exception.IsCriticalException())
             {
                 // A store exception might be thrown if the collection does not exist, depending on the memory store connector.
-                logger.LogError(exception, "Unexpected failure searching {0}", options.MemoryIndexName);
+                logger.LogError(exception, "Unexpected failure searching/storing memory. If using user-specific collections (userId={UserId}), ensure the collection exists first", userId);
             }
         }
     }

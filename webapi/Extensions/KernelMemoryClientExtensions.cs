@@ -85,9 +85,12 @@ internal static class KernelMemoryClientExtensions
         float relevanceThreshold,
         string chatId,
         string? memoryName = null,
+        string? userId = null, 
+        string? contextId = null,
+        Services.QdrantCollectionManager? qdrantCollectionManager = null,
         CancellationToken cancellationToken = default)
     {
-        return memoryClient.SearchMemoryAsync(indexName, query, relevanceThreshold, resultCount: -1, chatId, memoryName, cancellationToken);
+        return memoryClient.SearchMemoryAsync(indexName, query, relevanceThreshold, resultCount: -1, chatId, memoryName, userId, contextId, qdrantCollectionManager, cancellationToken);
     }
 
     public static async Task<SearchResult> SearchMemoryAsync(
@@ -98,6 +101,9 @@ internal static class KernelMemoryClientExtensions
         int resultCount,
         string chatId,
         string? memoryName = null,
+        string? userId = null,
+        string? contextId = null,
+        Services.QdrantCollectionManager? qdrantCollectionManager = null,
         CancellationToken cancellationToken = default)
     {
         var filter = new MemoryFilter();
@@ -109,10 +115,18 @@ internal static class KernelMemoryClientExtensions
             filter.ByTag(MemoryTags.TagMemory, memoryName);
         }
 
+        // If userId and contextId are provided, use the user-specific collection
+        string effectiveIndexName = indexName;
+        if (!string.IsNullOrEmpty(userId) && !string.IsNullOrEmpty(contextId) && qdrantCollectionManager != null)
+        {
+            effectiveIndexName = qdrantCollectionManager.GetCollectionNameString(userId, contextId, "memory");
+            await qdrantCollectionManager.EnsureCollectionExistsAsync(userId, contextId, "memory");
+        }
+
         var searchResult =
             await memoryClient.SearchAsync(
                 query,
-                indexName,
+                effectiveIndexName,
                 filter,
                 null,
                 relevanceThreshold, // minRelevance param

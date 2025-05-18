@@ -21,7 +21,7 @@ public class QdrantCollectionManager
     private readonly string _qdrantEndpoint;
     private readonly string? _qdrantApiKey;
     private readonly HttpClient _httpClient;
-    private readonly int _vectorSize = 1536; // Default for OpenAI ada embeddings
+    private readonly int _vectorSize = 1536; // Fixed dimension for OpenAI text-embedding-ada-002 model
 
     /// <summary>
     /// Initializes a new instance of the QdrantCollectionManager class.
@@ -41,14 +41,10 @@ public class QdrantCollectionManager
         var qdrantConfig = configuration.GetSection("KernelMemory:Services:Qdrant");
         this._qdrantEndpoint = qdrantConfig["Endpoint"] ?? "http://localhost:6333";
         this._qdrantApiKey = qdrantConfig["APIKey"];
-
-        // Get vector size from configuration or use default
-        var embeddingSection = configuration.GetSection("KernelMemory:Services:OpenAI");
-        if (embeddingSection != null && int.TryParse(embeddingSection["EmbeddingModelMaxTokenTotal"], out int configVectorSize))
-        {
-            this._vectorSize = configVectorSize;
-        }
-
+        
+        // NOTE: We use a fixed vector size for OpenAI text-embedding-ada-002 model
+        // Do NOT use EmbeddingModelMaxTokenTotal as that refers to the token limit, not the vector dimension
+        
         this._logger.LogInformation("QdrantCollectionManager initialized with endpoint: {Endpoint}", this._qdrantEndpoint);
     }
 

@@ -6,6 +6,7 @@ using CopilotChat.WebApi.Extensions;
 using CopilotChat.WebApi.Models.Storage;
 using CopilotChat.WebApi.Options;
 using CopilotChat.WebApi.Plugins.Utils;
+using CopilotChat.WebApi.Services;
 using CopilotChat.WebApi.Storage;
 using Microsoft.Extensions.Options;
 using Microsoft.KernelMemory;
@@ -31,17 +32,24 @@ public class KernelMemoryRetriever
     private readonly ILogger _logger;
 
     /// <summary>
+    /// Qdrant collection manager for user-specific collections.
+    /// </summary>
+    private readonly QdrantCollectionManager _qdrantCollectionManager;
+
+    /// <summary>
     /// Create a new instance of KernelMemoryRetriever.
     /// </summary>
     public KernelMemoryRetriever(
         IOptions<PromptsOptions> promptOptions,
         ChatSessionRepository chatSessionRepository,
         IKernelMemory memoryClient,
+        QdrantCollectionManager qdrantCollectionManager,
         ILogger logger)
     {
         this._promptOptions = promptOptions.Value;
         this._chatSessionRepository = chatSessionRepository;
         this._memoryClient = memoryClient;
+        this._qdrantCollectionManager = qdrantCollectionManager;
         this._logger = logger;
 
         this._memoryNames = new List<string>
@@ -61,13 +69,18 @@ public class KernelMemoryRetriever
         [Description("Chat ID to query history from")]
         string chatId,
         [Description("Maximum number of tokens")]
-        int tokenLimit)
+        int tokenLimit,
+        [Description("User ID for the specific user")]
+        string userId = "")
     {
         ChatSession? chatSession = null;
         if (!await this._chatSessionRepository.TryFindByIdAsync(chatId, callback: v => chatSession = v))
         {
             throw new ArgumentException($"Chat session {chatId} not found.");
         }
+
+        // Get the context ID from the chat session or default to "default"
+        string contextId = chatSession?.ContextId ?? "default";
 
         var remainingToken = tokenLimit;
 
@@ -79,8 +92,8 @@ public class KernelMemoryRetriever
             tasks.Add(SearchMemoryAsync(memoryName));
         }
 
-        // Global document memory.
-        tasks.Add(SearchMemoryAsync(this._promptOptions.DocumentMemoryName, isGlobalMemory: true));
+        // Global document memory. - There is no longer a global document memory
+        // tasks.Add(SearchMemoryAsync(this._promptOptions.DocumentMemoryName, isGlobalMemory: true));
         // Wait for all tasks to complete.
         await Task.WhenAll(tasks);
 
@@ -145,9 +158,23 @@ public class KernelMemoryRetriever
         // </summary>
         async Task SearchMemoryAsync(string memoryName, bool isGlobalMemory = false)
         {
+            // Use user-specific collection if this is not a global memory and we have valid user ID
+            string collectionName = this._promptOptions.MemoryIndexName;
+
+            if (!isGlobalMemory && !string.IsNullOrEmpty(userId))
+            {
+                // Get the user-specific collection name and ensure it exists
+                collectionName = this._qdrantCollectionManager.GetCollectionNameString(userId, contextId, "memory");
+                await this._qdrantCollectionManager.EnsureCollectionExistsAsync(userId, contextId, "memory");
+
+                this._logger.LogInformation(
+                    "Using user-specific collection {CollectionName} for user {UserId} with context {ContextId}",
+                    collectionName, userId, contextId);
+            }
+
             var searchResult =
                 await this._memoryClient.SearchMemoryAsync(
-                    this._promptOptions.MemoryIndexName,
+                    collectionName,
                     query,
                     this.CalculateRelevanceThreshold(memoryName, chatSession!.MemoryBalance),
                     isGlobalMemory ? DocumentMemoryOptions.GlobalDocumentChatId.ToString() : chatId,

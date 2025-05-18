@@ -146,6 +146,9 @@ public class ChatArchiveController : ControllerBase
                 relevanceThreshold: -1, // no relevance required since the collection only has one entry
                 chatId,
                 memoryName,
+                null,
+                null,
+                null,
                 cancellationToken);
 
             collectionMemoryRecords = result.Results;

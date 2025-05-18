@@ -69,6 +69,11 @@ public class ChatPlugin
     private readonly KernelMemoryRetriever _kernelMemoryRetriever;
 
     /// <summary>
+    /// Qdrant collection manager for user-specific collections.
+    /// </summary>
+    private readonly QdrantCollectionManager _qdrantCollectionManager;
+
+    /// <summary>
     /// Azure content safety moderator.
     /// </summary>
     private readonly AzureContentSafety? _contentSafety = null;
@@ -85,6 +90,7 @@ public class ChatPlugin
         IOptions<PromptsOptions> promptOptions,
         IOptions<DocumentMemoryOptions> documentImportOptions,
         ILogger logger,
+        QdrantCollectionManager qdrantCollectionManager,
         AzureContentSafety? contentSafety = null)
     {
         this._logger = logger;
@@ -95,8 +101,9 @@ public class ChatPlugin
         this._messageRelayHubContext = messageRelayHubContext;
         // Clone the prompt options to avoid modifying the original prompt options.
         this._promptOptions = promptOptions.Value.Copy();
+        this._qdrantCollectionManager = qdrantCollectionManager;
 
-        this._kernelMemoryRetriever = new KernelMemoryRetriever(promptOptions, chatSessionRepository, memoryClient, logger);
+        this._kernelMemoryRetriever = new KernelMemoryRetriever(promptOptions, chatSessionRepository, memoryClient, qdrantCollectionManager, logger);
 
         this._contentSafety = contentSafety;
     }
@@ -268,7 +275,7 @@ public class ChatPlugin
 
         // Query relevant semantic and document memories
         await this.UpdateBotResponseStatusOnClientAsync(chatId, "Extracting semantic and document memories", cancellationToken);
-        (var memoryText, var citationMap) = await this._kernelMemoryRetriever.QueryMemoriesAsync(userIntent, chatId, chatMemoryTokenBudget);
+        (var memoryText, var citationMap) = await this._kernelMemoryRetriever.QueryMemoriesAsync(userIntent, chatId, chatMemoryTokenBudget, userId);
         if (!string.IsNullOrWhiteSpace(memoryText))
         {
             metaPrompt.AddSystemMessage(memoryText);
@@ -333,6 +340,19 @@ public class ChatPlugin
 
         // Extract semantic chat memory
         await this.UpdateBotResponseStatusOnClientAsync(chatId, "Generating semantic chat memory", cancellationToken);
+        
+        // Get the chat session to retrieve contextId
+        ChatSession? chatSession = null;
+        await this._chatSessionRepository.TryFindByIdAsync(chatId, callback: v => chatSession = v);
+        string contextId = chatSession?.ContextId ?? "default";
+        
+        // Ensure the user-specific collection exists before trying to use it
+        if (!string.IsNullOrEmpty(userId))
+        {
+            await this._qdrantCollectionManager.EnsureCollectionExistsAsync(userId, contextId, "memory");
+            this._logger.LogInformation("Ensured user-specific collection exists for user {UserId} with context {ContextId}", userId, contextId);
+        }
+        
         await AsyncUtils.SafeInvokeAsync(
             () => SemanticChatMemoryExtractor.ExtractSemanticChatMemoryAsync(
                 chatId,
@@ -341,6 +361,8 @@ public class ChatPlugin
                 chatContext,
                 this._promptOptions,
                 this._logger,
+                userId,  // Pass the userId for user-specific collections
+                contextId, // Pass the contextId for context-specific collections
                 cancellationToken), nameof(SemanticChatMemoryExtractor.ExtractSemanticChatMemoryAsync));
 
         // Calculate total token usage for dependency functions and prompt template
