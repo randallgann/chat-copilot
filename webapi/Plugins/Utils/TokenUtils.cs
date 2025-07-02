@@ -75,7 +75,31 @@ public static class TokenUtils
         try
         {
             var jsonObject = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(usageObject));
-            tokenUsage = jsonObject.GetProperty("TotalTokens").GetInt32();
+            // Try to get TotalTokens property (traditional format)
+            if (jsonObject.TryGetProperty("TotalTokens", out JsonElement totalTokensElement))
+            {
+                tokenUsage = totalTokensElement.GetInt32();
+            }
+            // Try newer format with completion_tokens + prompt_tokens
+            else if (jsonObject.TryGetProperty("CompletionTokens", out JsonElement completionTokens) &&
+                     jsonObject.TryGetProperty("PromptTokens", out JsonElement promptTokens))
+            {
+                tokenUsage = completionTokens.GetInt32() + promptTokens.GetInt32();
+            }
+            else if (jsonObject.TryGetProperty("TotalTokenCount", out JsonElement totalTokenCountElement))
+            {
+                tokenUsage = totalTokenCountElement.GetInt32();
+                // Optionally stop displaying the warning for this now recognized format
+                logger.LogDebug("Using TotalTokenCount format: {TokenCount}", tokenUsage);
+            }
+            // If structure is different, try to log the actual structure for debugging
+            else
+            {
+                logger.LogWarning("Unexpected Usage format in model result: {Format}",
+                    JsonSerializer.Serialize(usageObject));
+                // Fallback to a token count estimate based on the response text length
+                tokenUsage = TokenCount(result.ToString()) * 2; // Rough estimate including prompt
+            }
         }
         catch (KeyNotFoundException)
         {

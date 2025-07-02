@@ -129,7 +129,7 @@ internal static class SemanticChatMemoryExtractor
             {
                 // Determine the collection name to use
                 string collectionName = options.MemoryIndexName;
-                
+
                 // Use user-specific collection if a userId is provided
                 if (!string.IsNullOrEmpty(userId))
                 {
@@ -137,7 +137,7 @@ internal static class SemanticChatMemoryExtractor
                     collectionName = QdrantCollectionName.NormalizeId($"cc-{userId}-{contextId}-memory");
                     logger.LogInformation("Using user-specific collection {CollectionName} for user {UserId}", collectionName, userId);
                 }
-                
+
                 // Search if there is already a memory item that has a high similarity score with the new item.
                 var searchResult =
                     await memoryClient.SearchMemoryAsync(

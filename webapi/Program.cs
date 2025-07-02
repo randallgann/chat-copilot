@@ -50,7 +50,8 @@ public sealed class Program
         builder.Services.AddSignalR(options =>
         {
             options.EnableDetailedErrors = true;
-            options.KeepAliveInterval = TimeSpan.FromMinutes(1);
+            options.KeepAliveInterval = TimeSpan.FromSeconds(15); // Match client expectation
+            options.ClientTimeoutInterval = TimeSpan.FromSeconds(30); // 2x keep-alive interval
             options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
         });
 
