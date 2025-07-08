@@ -7,6 +7,42 @@ This changelog serves as a reference for developers working on Chat Copilot to t
 
 ## Changes
 
+### 2025-07-08: Transcript Import Feature for YouTube Video Integration
+
+Added comprehensive transcript import functionality to enable seamless integration with external video transcription services, allowing video content to be processed into searchable vector embeddings.
+
+**New Features:**
+- **TranscriptImportController**: New REST API endpoint `POST /api/memory/import-transcript` for importing video transcript segments
+- **Request/Response Models**: `ImportTranscriptRequest`, `ImportTranscriptResponse`, and `TranscriptSegment` models for structured data exchange
+- **KernelMemory Integration**: Transcript segments are processed through the full KernelMemory pipeline (extract, partition, gen_embeddings, save_records)
+- **Qdrant Collection Management**: Automatic creation and management of user-specific collections for transcript storage
+- **Comprehensive Documentation**: Added detailed feature documentation in `/docs/TranscriptImportFeature.md`
+
+**Key Architecture Components:**
+- Transcript segments are converted to formatted documents with metadata (video title, URL, timestamps)
+- Each segment becomes a separate vector entry in Qdrant with rich metadata tags
+- Integration with existing QdrantCollectionManager for consistent collection naming
+- Proper error handling with segment-level fault tolerance
+- Authentication and authorization through existing auth framework
+
+**Technical Implementation:**
+- Transcript text is processed through memory streams for KernelMemory compatibility
+- Document upload requests include comprehensive metadata tagging (user_id, channel_id, video_id, timestamps, etc.)
+- Pipeline steps: extract → partition → gen_embeddings → save_records
+- Collection naming pattern: `cc-{userId}-{channelId}-{contextId}`
+- Supports partial success scenarios where some segments may fail without affecting others
+
+**Bug Fixes:**
+- Removed unnecessary channel validation that was causing authentication conflicts with external services
+- Fixed document creation to use proper KernelMemory APIs and stream processing
+- Resolved Docker build issues and optimized container image
+
+**Impact:**
+- Enables external video transcription services to seamlessly integrate with chat-copilot
+- Video content becomes instantly searchable through natural language chat queries
+- Maintains data isolation between users and channels
+- Provides foundation for multi-media content integration
+
 ### 2025-05-17: Fixed Memory Storage Issues with User-Specific Qdrant Collections
 
 Fixed issues related to chat memory storage by updating the memory extraction system to consistently use user-specific Qdrant collections and correcting vector dimensions.
